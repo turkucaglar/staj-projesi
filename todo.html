@@ -1,0 +1,306 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Görev Listem</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #e3f2fd, #f9fbe7);
+      padding: 40px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .todo-container {
+      width: 100%;
+      max-width: 700px;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      padding: 30px;
+    }
+
+    h1 {
+      color: #1e88e5;
+      text-align: center;
+      margin-bottom: 25px;
+    }
+
+    .input-group {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .input-group input[type="text"],
+    .input-group input[type="checkbox"] {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    label {
+      font-weight: 600;
+    }
+
+    #add-btn {
+      padding: 12px;
+      background-color: #43a047;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+      transition: background-color 0.3s ease;
+    }
+
+    #add-btn:hover {
+      background-color: #2e7d32;
+    }
+
+    .todo-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .todo-item {
+      display: flex;
+      align-items: center;
+      background: #fafafa;
+      padding: 15px 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-bottom: 12px;
+      transition: transform 0.2s ease;
+    }
+
+    .todo-item:hover {
+      transform: translateY(-2px);
+    }
+
+    .todo-item.completed .todo-title {
+      text-decoration: line-through;
+      color: #9e9e9e;
+    }
+
+    .todo-checkbox {
+      margin-right: 15px;
+    }
+
+    .todo-title {
+      flex: 1;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .delete-btn {
+      background-color: #ef5350;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      margin-left: 10px;
+      transition: background-color 0.3s ease;
+    }
+
+    .delete-btn:hover {
+      background-color: #c62828;
+    }
+
+    /* Modal */
+    #update-modal {
+      display: none;
+      position: fixed;
+      top: 35%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      z-index: 1000;
+      width: 300px;
+    }
+
+    #update-modal button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      margin-right: 10px;
+      cursor: pointer;
+    }
+
+    #update-modal button:first-of-type {
+      background-color: #1e88e5;
+      color: white;
+    }
+
+    #update-modal button:last-of-type {
+      background-color: #eeeeee;
+    }
+
+    .loading {
+      text-align: center;
+      color: #888;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="todo-container">
+    <h1>Görev Listem</h1>
+    
+    <div class="input-group">
+      <label for="todo-id">Görev ID</label>
+      <input type="text" id="todo-id" placeholder="Örn: 101">
+
+      <label for="new-todo">Görev Başlığı</label>
+      <input type="text" id="new-todo" placeholder="Görev giriniz...">
+
+      <label><input type="checkbox" id="is-completed"> Tamamlandı mı?</label>
+
+      <button id="add-btn" onclick="addTodo()">Görev Ekle</button>
+    </div>
+
+    <ul class="todo-list" id="todo-list">
+      <li class="loading">Görevler yükleniyor...</li>
+    </ul>
+  </div>
+
+  <!-- Modal kutusu -->
+  <div id="update-modal">
+    <p id="modal-title">Görev tamamlandı mı?</p>
+    <label><input type="checkbox" id="modal-completed-checkbox" /> Tamamlandı</label><br><br>
+    <button onclick="confirmUpdate()">Güncelle</button>
+    <button onclick="closeModal()">İptal</button>
+  </div>
+
+  <!-- Scriptler (eski scriptin aynı işlevsellikte sürümü) -->
+  <script>
+    const API_URL = 'http://localhost:5044/TodoItems';
+    let currentUpdateId = null;
+    let currentTitle = '';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadTodos();
+      document.getElementById('new-todo').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') addTodo();
+      });
+    });
+
+    async function loadTodos() {
+      try {
+        const response = await fetch(API_URL);
+        const todos = await response.json();
+        const todoList = document.getElementById('todo-list');
+        todoList.innerHTML = '';
+
+        if (todos.length === 0) {
+          todoList.innerHTML = '<li class="loading">Henüz görev eklenmedi</li>';
+          return;
+        }
+
+        todos.forEach(todo => {
+          const li = document.createElement('li');
+          li.className = `todo-item ${todo.isCompleted ? 'completed' : ''}`;
+          li.innerHTML = `
+            <input type="checkbox" class="todo-checkbox" ${todo.isCompleted ? 'checked' : ''} onchange="toggleTodo(${todo.id}, this)">
+            <span class="todo-title">${todo.title}</span>
+            <button class="delete-btn" onclick="deleteTodo(${todo.id})">Sil</button>
+            <button class="delete-btn" onclick="updateTodo(${todo.id})">Güncelle</button>
+          `;
+          todoList.appendChild(li);
+        });
+      } catch (error) {
+        console.error('Listeleme hatası:', error);
+      }
+    }
+
+    async function addTodo() {
+      const id = parseInt(document.getElementById('todo-id').value);
+      const title = document.getElementById('new-todo').value;
+      const isCompleted = document.getElementById('is-completed').checked;
+
+      if (isNaN(id) || !title.trim()) {
+        alert("Lütfen geçerli bir ID ve başlık girin");
+        return;
+      }
+
+      await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, title, isCompleted })
+      });
+
+      document.getElementById('todo-id').value = '';
+      document.getElementById('new-todo').value = '';
+      document.getElementById('is-completed').checked = false;
+
+      await loadTodos();
+    }
+
+    async function deleteTodo(id) {
+      if (confirm("Bu görevi silmek istiyor musunuz?")) {
+        await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        await loadTodos();
+      }
+    }
+
+    async function toggleTodo(id, checkbox) {
+      const res = await fetch(`${API_URL}/${id}`);
+      const todo = await res.json();
+      const updated = { id: todo.id, title: todo.title, isCompleted: checkbox.checked };
+
+      await fetch(`${API_URL}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+
+      await loadTodos();
+    }
+
+    async function updateTodo(id) {
+      const res = await fetch(`${API_URL}/${id}`);
+      const todo = await res.json();
+
+      currentUpdateId = todo.id;
+      currentTitle = todo.title;
+      document.getElementById('modal-title').textContent = `"${todo.title}" tamamlandı mı?`;
+      document.getElementById('modal-completed-checkbox').checked = todo.isCompleted;
+      document.getElementById('update-modal').style.display = 'block';
+    }
+
+    function closeModal() {
+      document.getElementById('update-modal').style.display = 'none';
+    }
+
+    async function confirmUpdate() {
+      const isChecked = document.getElementById('modal-completed-checkbox').checked;
+
+      const updatedTodo = {
+        id: currentUpdateId,
+        title: currentTitle,
+        isCompleted: isChecked
+      };
+
+      await fetch(`${API_URL}/${currentUpdateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedTodo)
+      });
+
+      closeModal();
+      await loadTodos();
+    }
+  </script>
+</body>
+</html>
